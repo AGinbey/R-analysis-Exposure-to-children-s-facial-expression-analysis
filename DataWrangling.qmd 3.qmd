@@ -1,0 +1,1647 @@
+---
+title: "DataWrangling"
+format: html
+editor: visual
+---
+
+# Preparation
+
+```{r}
+library(qualtRics)
+library(tidyverse)
+library(data.table)
+library(lme4)
+library(lmerTest)
+library(sjPlot)
+library(emmeans)
+library(easystats)
+library(wordcloud)
+library(tm)
+```
+
+#Data Wrangling
+
+```{r}
+#| echo: false
+rawData <- read_survey("2023 Facial Expression Perception_July 25, 2023_06.50.csv")
+
+rawData <- dplyr::filter(rawData, `Duration (in seconds)` > 100) # removes people with duration less than 100 seconds
+rawData <- dplyr::select(rawData, DistributionChannel:Q32.1) # selects the relevant data variable ands removes the others.
+rawData <- dplyr::filter(rawData, DistributionChannel %in% c("anonymous", "qr")) # selects all that are live and not preview
+rawData <- dplyr::filter(rawData, Q2.1 %in% c("123456")) # selects all that have consented
+rawData <- dplyr::filter(rawData, Q2.2 %in% c("1")) # selects all that have consented
+rawData <- dplyr::select(rawData, -(Q2.1:Q2.2))
+rawData <- dplyr::select(rawData, -(DistributionChannel:UserLanguage)) # selects the relevant
+rawData <- rawData %>% mutate(PartNo = row_number()) # add a Participant Number
+rawData <- rawData %>%  dplyr::select("PartNo", everything())
+
+rawData <- rawData %>% 
+  rename("Gender" = "Q1.2") %>%
+  rename("Age" = "Q1.3") %>%
+  rename("HaveChildren" = "Q1.4") %>%
+  rename("WorkChildren" = "Q1.5") %>%
+  rename("HoursInteracting" = "Q1.6_1")
+```
+
+```{r}
+#| echo: false
+# Not very elegant brute force name change to set up the variables for pivot_longer.
+rawData <- rawData %>% 
+rename("Q6_V_Fear_18S_Valence" = "Q6.3_1") %>%
+rename("Q6_V_Fear_18S_Arousal" = "Q6.4_1") %>%
+rename("Q6_V_Fear_18S_Dominance" = "Q6.5_1") %>%
+rename("Q6_V_Fear_18S_Expressivity" = "Q6.7_1") %>%
+rename("Q6_V_Fear_18S_Confident" = "Q6.8_1") %>%
+rename("Q7_V_Fear_27F_Valence" = "Q7.3_1") %>%
+rename("Q7_V_Fear_27F_Arousal" = "Q7.4_1") %>%
+rename("Q7_V_Fear_27F_Dominance" = "Q7.5_1") %>%
+rename("Q7_V_Fear_27F_Expressivity" = "Q7.7_1") %>%
+rename("Q7_V_Fear_27F_Confident" = "Q7.8_1") %>%
+rename("Q10_SP_Fear_S12_Valence" = "Q8.3_1") %>%
+rename("Q10_SP_Fear_S12_Arousal" = "Q8.4_1") %>%
+rename("Q10_SP_Fear_S12_Dominance" = "Q8.5_1") %>%
+rename("Q10_SP_Fear_S12_Expressivity" = "Q8.7_1") %>%
+rename("Q10_SP_Fear_S12_Confident" = "Q8.8_1") %>%
+rename("Q11_SP_Fear_S2_Valence" = "Q9.3_1") %>%
+rename("Q11_SP_Fear_S2_Arousal" = "Q9.4_1") %>%
+rename("Q11_SP_Fear_S2_Dominance" = "Q9.5_1") %>%
+rename("Q11_SP_Fear_S2_Expressivity" = "Q9.7_1") %>%
+rename("Q11_SP_Fear_S2_Confident" = "Q9.8_1") %>%
+rename("Q8_V_Pride_28P_Valence" = "Q10.3_1") %>%
+rename("Q8_V_Pride_28P_Arousal" = "Q10.4_1") %>%
+rename("Q8_V_Pride_28P_Dominance" = "Q10.5_1") %>%
+rename("Q8_V_Pride_28P_Expressivity" = "Q10.7_1") %>%
+rename("Q8_V_Pride_28P_Confident" = "Q10.8_1") %>%
+rename("Q12_V_Pride_36P_Valence" = "Q11.3_1") %>%
+rename("Q12_V_Pride_36P_Arousal" = "Q11.4_1") %>%
+rename("Q12_V_Pride_36P_Dominance" = "Q11.5_1") %>%
+rename("Q12_V_Pride_36P_Expressivity" = "Q11.7_1") %>%
+rename("Q12_V_Pride_36P_Confident" = "Q11.8_1") %>%
+rename("Q13_SP_Surprise_S1_Valence" = "Q12.3_1") %>%
+rename("Q13_SP_Surprise_S1_Arousal" = "Q12.4_1") %>%
+rename("Q13_SP_Surprise_S1_Dominance" = "Q12.5_1") %>%
+rename("Q13_SP_Surprise_S1_Expressivity" = "Q12.7_1") %>%
+rename("Q13_SP_Surprise_S1_Confident" = "Q12.8_1") %>%
+rename("Q9_SP_Surprise_S10_Valence" = "Q13.3_1") %>%
+rename("Q9_SP_Surprise_S10_Arousal" = "Q13.4_1") %>%
+rename("Q9_SP_Surprise_S10_Dominance" = "Q13.5_1") %>%
+rename("Q9_SP_Surprise_S10_Expressivity" = "Q13.7_1") %>%
+rename("Q9_SP_Surprise_S10_Confident" = "Q13.8_1") %>%
+rename("Q14_SP_Anger_S11_Valence" = "Q14.3_1") %>%
+rename("Q14_SP_Anger_S11_Arousal" = "Q14.4_1") %>%
+rename("Q14_SP_Anger_S11_Dominance" = "Q14.5_1") %>%
+rename("Q14_SP_Anger_S11_Expressivity" = "Q14.7_1") %>%
+rename("Q14_SP_Anger_S11_Confident" = "Q14.8_1") %>%
+rename("Q15_V_Embarrassed_11e_Valence" = "Q15.3_1") %>%
+rename("Q15_V_Embarrassed_11e_Arousal" = "Q15.4_1") %>%
+rename("Q15_V_Embarrassed_11e_Dominance" = "Q15.5_1") %>%
+rename("Q15_V_Embarrassed_11e_Expressivity" = "Q15.7_1") %>%
+rename("Q15_V_Embarrassed_11e_Confident" = "Q15.8_1") %>%
+rename("Q16_V_Embarrassed_33e_Valence" = "Q16.3_1") %>%
+rename("Q16_V_Embarrassed_33e_Arousal" = "Q16.4_1") %>%
+rename("Q16_V_Embarrassed_33e_Dominance" = "Q16.5_1") %>%
+rename("Q16_V_Embarrassed_33e_Expressivity" = "Q16.7_1") %>%
+rename("Q16_V_Embarrassed_33e_Confident" = "Q16.8_1") %>%
+rename("Q17_V_Disgust_28d_Valence" = "Q17.3_1") %>%
+rename("Q17_V_Disgust_28d_Arousal" = "Q17.4_1") %>%
+rename("Q17_V_Disgust_28d_Dominance" = "Q17.5_1") %>%
+rename("Q17_V_Disgust_28d_Expressivity" = "Q17.7_1") %>%
+rename("Q17_V_Disgust_28d_Confident" = "Q17.8_1") %>%
+rename("Q18_V_Disgust_24d_Valence" = "Q18.3_1") %>%
+rename("Q18_V_Disgust_24d_Arousal" = "Q18.4_1") %>%
+rename("Q18_V_Disgust_24d_Dominance" = "Q18.5_1") %>%
+rename("Q18_V_Disgust_24d_Expressivity" = "Q18.7_1") %>%
+rename("Q18_V_Disgust_24d_Confident" = "Q18.8_1") %>%
+rename("Q19_SP_Disgust_S11_Valence" = "Q19.3_1") %>%
+rename("Q19_SP_Disgust_S11_Arousal" = "Q19.4_1") %>%
+rename("Q19_SP_Disgust_S11_Dominance" = "Q19.5_1") %>%
+rename("Q19_SP_Disgust_S11_Expressivity" = "Q19.7_1") %>%
+rename("Q19_SP_Disgust_S11_Confident" = "Q19.8_1") %>%
+rename("Q20_SP_Disgust_S12_Valence" = "Q20.3_1") %>%
+rename("Q20_SP_Disgust_S12_Arousal" = "Q20.4_1") %>%
+rename("Q20_SP_Disgust_S12_Dominance" = "Q20.5_1") %>%
+rename("Q20_SP_Disgust_S12_Expressivity" = "Q20.7_1") %>%
+rename("Q20_SP_Disgust_S12_Confident" = "Q20.8_1") %>%
+rename("Q21_V_Sad_34S_Valence" = "Q21.3_1") %>%
+rename("Q21_V_Sad_34S_Arousal" = "Q21.4_1") %>%
+rename("Q21_V_Sad_34S_Dominance" = "Q21.5_1") %>%
+rename("Q21_V_Sad_34S_Expressivity" = "Q21.7_1") %>%
+rename("Q21_V_Sad_34S_Confident" = "Q21.8_1") %>%
+rename("Q25_V_Sad_10S_Valence" = "Q22.3_1") %>%
+rename("Q25_V_Sad_10S_Arousal" = "Q22.4_1") %>%
+rename("Q25_V_Sad_10S_Dominance" = "Q22.5_1") %>%
+rename("Q25_V_Sad_10S_Expressivity" = "Q22.7_1") %>%
+rename("Q25_V_Sad_10S_Confident" = "Q22.8_1") %>%
+rename("Q24_SP_Sad_S8_Valence" = "Q23.3_1") %>%
+rename("Q24_SP_Sad_S8_Arousal" = "Q23.4_1") %>%
+rename("Q24_SP_Sad_S8_Dominance" = "Q23.5_1") %>%
+rename("Q24_SP_Sad_S8_Expressivity" = "Q23.7_1") %>%
+rename("Q24_SP_Sad_S8_Confident" = "Q23.8_1") %>%
+rename("Q27_SP_Sad_S6_Valence" = "Q24.3_1") %>%
+rename("Q27_SP_Sad_S6_Arousal" = "Q24.4_1") %>%
+rename("Q27_SP_Sad_S6_Dominance" = "Q24.5_1") %>%
+rename("Q27_SP_Sad_S6_Expressivity" = "Q24.7_1") %>%
+rename("Q27_SP_Sad_S6_Confident" = "Q24.8_1") %>%
+rename("Q22_SP_Happy_S3_Valence" = "Q25.3_1") %>%
+rename("Q22_SP_Happy_S3_Arousal" = "Q25.4_1") %>%
+rename("Q22_SP_Happy_S3_Dominance" = "Q25.5_1") %>%
+rename("Q22_SP_Happy_S3_Expressivity" = "Q25.7_1") %>%
+rename("Q22_SP_Happy_S3_Confident" = "Q25.8_1") %>%
+rename("Q23_SP_Happy_S7_Valence" = "Q26.3_1") %>%
+rename("Q23_SP_Happy_S7_Arousal" = "Q26.4_1") %>%
+rename("Q23_SP_Happy_S7_Dominance" = "Q26.5_1") %>%
+rename("Q23_SP_Happy_S7_Expressivity" = "Q26.7_1") %>%
+rename("Q23_SP_Happy_S7_Confident" = "Q26.8_1") %>%
+rename("Q26_V_Happy_40h_Valence" = "Q27.3_1") %>%
+rename("Q26_V_Happy_40h_Arousal" = "Q27.4_1") %>%
+rename("Q26_V_Happy_40h_Dominance" = "Q27.5_1") %>%
+rename("Q26_V_Happy_40h_Expressivity" = "Q27.7_1") %>%
+rename("Q26_V_Happy_40h_Confident" = "Q27.8_1") %>%
+rename("Q28_V_Happy_17H_Valence" = "Q28.3_1") %>%
+rename("Q28_V_Happy_17H_Arousal" = "Q28.4_1") %>%
+rename("Q28_V_Happy_17H_Dominance" = "Q28.5_1") %>%
+rename("Q28_V_Happy_17H_Expressivity" = "Q28.7_1") %>%
+rename("Q28_V_Happy_17H_Confident" = "Q28.8_1")
+```
+
+Remove unwanted variables at this stage
+
+```{r}
+rawData <- dplyr::select(rawData, -(Q4.4_1:Q4.9_1)) 
+wordcloudVars <- dplyr::select(rawData, contains("."))
+rawData <- dplyr::select(rawData, -contains("."))
+```
+
+```{r}
+rawData$HaveChildren <- as.factor(rawData$HaveChildren)
+levels(rawData$HaveChildren) <- c("Yes", "No")
+
+rawData$WorkChildren <- as.factor(rawData$WorkChildren)
+levels(rawData$WorkChildren) <- c("Yes", "No")
+```
+
+```{r}
+LongData <- rawData %>%  tidyr::pivot_longer(
+  cols = "Q6_V_Fear_18S_Valence":"Q28_V_Happy_17H_Confident",
+  names_to = c("Question", "VolSpont", "EmotionLabel", "Clip", "DV"),
+  names_sep = "_",
+  values_to = "Value"
+)
+
+LongData <- dplyr::filter(LongData, !is.na(Value))
+
+LongData$VolSpont <- as.factor(LongData$VolSpont)
+str(LongData$VolSpont)
+levels(LongData$VolSpont) <- c("Spontaneous", "Volitional")
+
+
+# Calculate the means and standard deviations for each combination of Question, Valence, and Arousal
+filtered_summary <- LongData %>%
+  group_by(EmotionLabel, VolSpont, Question, DV) %>%
+  summarise(mean_value = mean(Value, na.rm = TRUE),
+            sd_value = sd(Value, na.rm = TRUE))
+
+# Display the calculated means and standard deviations
+print(filtered_summary)
+```
+
+```{r}
+total_participants <- length(unique(LongData$PartNo))
+
+# Creating a unique data frame for counting
+unique_data <- LongData %>%
+  distinct(PartNo, Gender, Age, HaveChildren, WorkChildren)
+
+ 
+gender_counts <- unique_data %>%
+  count(Gender)
+
+ 
+
+# Counting total of each gender
+gender_labels <- c("1", "2")
+gender_counts_named <- setNames(gender_counts$n, gender_labels)
+
+
+print(gender_counts_named)
+
+ 
+
+# Have children count
+have_children_counts <- unique_data %>%
+  count(HaveChildren)
+
+ 
+print(have_children_counts)
+
+ 
+
+# Work children count
+work_children_counts <- unique_data %>%
+  count(WorkChildren)
+
+ 
+
+print(work_children_counts)
+```
+
+# Models
+
+# WorkChildren and VolSpont Models
+
+## Valence
+
+```{r}
+ValenceLongData <- dplyr::filter(LongData, DV %in% c("Valence"))
+```
+
+### Valence: Fear
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ValenceLongDataFear <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Fear"))
+
+modelValenceFear <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ValenceLongDataFear)
+
+plot(check_model(modelValenceFear)) # assumptions checks needs to be done outside the quarto dcument
+summary(modelValenceFear)
+anova(modelValenceFear) 
+sjPlot::plot_model(modelValenceFear, type = "int")
+plot(estimate_means(modelValenceFear))
+
+
+emmeans(modelValenceFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Valence: Happy
+
+Highly signifcant VolSpont Main Effect Marginal Interaction
+
+```{r}
+ValenceLongDataHappy <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Happy"))
+
+modelValenceHappy <- lmer(Value ~ WorkChildren*VolSpont + (1|PartNo), data = ValenceLongDataHappy)
+summary(modelValenceHappy)
+anova(modelValenceHappy) 
+
+emmeans(modelValenceHappy, ~ WorkChildren) # WorkChildren main effect
+emmeans(modelValenceHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+####Raw Data Means - Just doing this once as a sanity check.
+
+```{r}
+ValenceLongDataHappyRawMeans <- ValenceLongDataHappy %>%
+  group_by(WorkChildren, VolSpont) %>%
+  summarise(mean = mean(Value))
+
+ggplot(data = ValenceLongDataHappyRawMeans, aes(x = WorkChildren, y = mean, colour = VolSpont)) +
+    geom_line(aes(group = VolSpont)) +
+    geom_point() +
+    labs(
+        x = "Works with Children",
+        y = "Valence",
+        title = paste(
+            "Raw Data Means - Calculated Outisde the Model"
+        )
+    )
+```
+
+```{r}
+sjPlot::plot_model(modelValenceHappy, type = "int")
+plot(estimate_means(modelValenceHappy))
+```
+
+### Valence: Disgust
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ValenceLongDataDisgust <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelValenceDisgust <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ValenceLongDataDisgust)
+summary(modelValenceDisgust)
+anova(modelValenceDisgust)
+sjPlot::plot_model(modelValenceDisgust, type = "int")
+plot(estimate_means(modelValenceDisgust))
+
+
+emmeans(modelValenceDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Valence: Sad
+
+```{r}
+ValenceLongDataSad <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Sad"))
+
+modelValenceSad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ValenceLongDataSad)
+summary(modelValenceSad)
+anova(modelValenceSad)
+sjPlot::plot_model(modelValenceSad, type = "int")
+plot(estimate_means(modelValenceSad))
+
+
+emmeans(modelValenceSad, ~ VolSpont) # VolSpont main effect
+
+```
+
+## Arousal
+
+```{r}
+ArousalLongData <- dplyr::filter(LongData, DV %in% c("Arousal"))
+```
+
+### Arousal: Fear
+
+Significant VolSpont Main Effect
+
+```{r}
+ArousalLongDataFear <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Fear"))
+
+
+modelArousalFear <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ArousalLongDataFear)
+summary(modelArousalFear)
+anova(modelArousalFear)
+sjPlot::plot_model(modelArousalFear, type = "int")
+plot(estimate_means(modelArousalFear))
+```
+
+### Arousal: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ArousalLongDataHappy <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Happy"))
+
+modelArousalHappy <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ArousalLongDataHappy)
+summary(modelArousalHappy)
+anova(modelArousalHappy) 
+sjPlot::plot_model(modelArousalHappy, type = "int")
+plot(estimate_means(modelArousalHappy))
+```
+
+### Arousal: Disgust
+
+Magrginal VolSpont Main Effect - do not report
+
+```{r}
+ArousalLongDataDisgust <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Disgust"))
+
+modelArousalDisgust <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ArousalLongDataDisgust)
+summary(modelArousalDisgust)
+anova(modelArousalDisgust)
+sjPlot::plot_model(modelArousalDisgust, type = "int")
+plot(estimate_means(modelArousalDisgust))
+
+
+emmeans(modelArousalDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Arousal: Sad
+
+```{r}
+ArousalLongDataSad <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Sad"))
+
+modelArousalSad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ArousalLongDataSad)
+summary(modelArousalSad)
+anova(modelArousalSad)
+sjPlot::plot_model(modelArousalSad, type = "int")
+plot(estimate_means(modelArousalSad))
+
+
+emmeans(modelArousalSad, ~ VolSpont) # VolSpont main effect
+
+```
+
+## Dominance
+
+```{r}
+DominanceLongData <- dplyr::filter(LongData, DV %in% c("Dominance"))
+```
+
+### Dominance: Fear
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+DominanceLongDataFear <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Fear"))
+
+modelDominanceFear <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = DominanceLongDataFear)
+summary(modelDominanceFear)
+anova(modelDominanceFear)
+sjPlot::plot_model(modelDominanceFear, type = "int")
+plot(estimate_means(modelDominanceFear))
+
+
+emmeans(modelDominanceFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Dominance: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+DominanceLongDataHappy <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Happy"))
+
+modelDominanceHappy <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = DominanceLongDataHappy)
+summary(modelDominanceHappy)
+anova(modelDominanceHappy) 
+sjPlot::plot_model(modelDominanceHappy, type = "int")
+plot(estimate_means(modelDominanceHappy))
+```
+
+### Dominance: Disgust
+
+```{r}
+DominanceLongDataDisgust <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Disgust"))
+
+modelDominanceDisgust <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = DominanceLongDataDisgust)
+summary(modelDominanceDisgust)
+anova(modelDominanceDisgust)
+sjPlot::plot_model(modelDominanceDisgust, type = "int")
+plot(estimate_means(modelDominanceDisgust))
+
+
+emmeans(modelConfidenceHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Dominance: Sad
+
+```{r}
+DominanceLongDataSad <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Sad"))
+
+modelDominanceSad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = DominanceLongDataSad)
+summary(modelDominanceSad)
+anova(modelDominanceSad)
+sjPlot::plot_model(modelDominanceSad, type = "int")
+plot(estimate_means(modelDominanceSad))
+
+emmeans(modelDominanceSad, ~ WorkChildren) # WorkChildren main effect
+emmeans(modelDominanceSad, ~ VolSpont) # VolSpont main effect
+emmeans(modelDominanceSad, ~ WorkChildren*VolSpont) # interaction means
+```
+
+## Expressivity
+
+```{r}
+ExpressivityLongData <- dplyr::filter(LongData, DV %in% c("Expressivity"))
+```
+
+### Expressivity: Fear
+
+```{r}
+ExpressivityLongDataFear <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Fear"))
+
+modelExpressivityFear <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataFear)
+summary(modelExpressivityFear)
+anova(modelExpressivityFear)
+sjPlot::plot_model(modelExpressivityFear, type = "int")
+plot(estimate_means(modelExpressivityFear))
+
+
+emmeans(modelExpressivityFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ExpressivityLongDataHappy <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Happy"))
+
+modelExpressivityHappy <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataHappy)
+summary(modelExpressivityHappy)
+anova(modelExpressivityHappy) 
+sjPlot::plot_model(modelExpressivityHappy, type = "int")
+plot(estimate_means(modelExpressivityHappy))
+
+
+emmeans(modelExpressivityHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Disgust
+
+Significant WorkChildren Main Effect Highly Significant VolSpont Main Effect Marginal Interaction- do not report
+
+```{r}
+ExpressivityLongDataDisgust <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Disgust"))
+
+modelExpressivityDisgust <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataDisgust)
+summary(modelExpressivityDisgust)
+anova(modelExpressivityDisgust)
+sjPlot::plot_model(modelExpressivityDisgust, type = "int")
+plot(estimate_means(modelExpressivityDisgust))
+
+
+emmeans(modelExpressivityDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Sad
+
+```{r}
+ExpressivityLongDataSad <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Sad"))
+
+modelExpressivitySad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataSad)
+summary(modelExpressivitySad) 
+anova(modelExpressivitySad)
+sjPlot::plot_model(modelExpressivitySad, type = "int")
+plot(estimate_means(modelExpressivitySad))
+
+
+emmeans(modelExpressivitySad, ~ VolSpont) # VolSpont main effect
+
+```
+
+## Confidence
+
+```{r}
+ConfidenceLongData <- dplyr::filter(LongData, DV %in% c("Confident"))
+```
+
+### Confidence: Fear
+
+Marginal VolSpont Main Effect - do not report
+
+```{r}
+ConfidenceLongDataFear <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Fear"))
+
+modelConfidenceFear <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataFear)
+summary(modelConfidenceFear)
+anova(modelConfidenceFear)
+sjPlot::plot_model(modelConfidenceFear, type = "int")
+plot(estimate_means(modelConfidenceFear))
+```
+
+### Confidence: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataHappy <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Happy"))
+
+modelConfidenceHappy <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataHappy)
+summary(modelConfidenceHappy)
+anova(modelConfidenceHappy) 
+sjPlot::plot_model(modelConfidenceHappy, type = "int")
+plot(estimate_means(modelConfidenceHappy))
+
+
+emmeans(modelConfidenceHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Confidence: Disgust
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataDisgust <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelConfidenceDisgust <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataDisgust)
+summary(modelConfidenceDisgust)
+anova(modelConfidenceDisgust)
+sjPlot::plot_model(modelConfidenceDisgust, type = "int")
+plot(estimate_means(modelConfidenceDisgust))
+
+
+emmeans(modelConfidenceDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Confidence: Sad
+
+```{r}
+ConfidenceLongDataSad <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Sad"))
+
+modelConfidenceSad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataSad)
+summary(modelConfidenceSad)
+anova(modelConfidenceSad)
+sjPlot::plot_model(modelConfidenceSad, type = "int")
+plot(estimate_means(modelConfidenceSad))
+```
+
+# HaveChildren and VolSpont Models
+
+### Valence: Fear
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ValenceLongDataFear <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Fear"))
+
+modelValenceFear <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ValenceLongDataFear)
+
+#plot(check_model(modelValenceFear)) # assumptions checks needs to be done outside the quarto dcument
+summary(modelValenceFear)
+anova(modelValenceFear)
+sjPlot::plot_model(modelValenceFear, type = "int")
+plot(estimate_means(modelValenceFear))
+
+
+emmeans(modelValenceFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Valence: Happy
+
+Significant HaveChildren Main Effect Highly Significant VolSpont Main Effect
+
+```{r}
+ValenceLongDataHappy <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Happy"))
+
+modelValenceHappy <- lmer(Value ~ HaveChildren*VolSpont + (1|PartNo), data = ValenceLongDataHappy)
+summary(modelValenceHappy)
+anova(modelValenceHappy)
+
+
+emmeans(modelValenceHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+####Raw Data Means - Just doing this once as a sanity check.
+
+```{r}
+ValenceLongDataHappyRawMeans <- ValenceLongDataHappy %>%
+  group_by(HaveChildren, VolSpont) %>%
+  summarise(mean = mean(Value))
+
+ggplot(data = ValenceLongDataHappyRawMeans, aes(x = HaveChildren, y = mean, colour = VolSpont)) +
+    geom_line(aes(group = VolSpont)) +
+    geom_point() +
+    labs(
+        x = "Works with Children",
+        y = "Valence",
+        title = paste(
+            "Raw Data Means - Calculated Outisde the Model"
+        )
+    )
+```
+
+```{r}
+sjPlot::plot_model(modelValenceHappy, type = "int")
+plot(estimate_means(modelValenceHappy))
+```
+
+### Valence: Disgust
+
+Marginal HaveChildren Main Effect - do not report Significant VolSpont Main Effect
+
+```{r}
+ValenceLongDataDisgust <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelValenceDisgust <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ValenceLongDataDisgust)
+summary(modelValenceDisgust)
+anova(modelValenceDisgust)
+sjPlot::plot_model(modelValenceDisgust, type = "int")
+plot(estimate_means(modelValenceDisgust))
+
+
+emmeans(modelValenceDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Valence: Sad
+
+```{r}
+ValenceLongDataSad <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Sad"))
+
+modelValenceSad <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ValenceLongDataSad)
+summary(modelValenceSad)
+anova(modelValenceSad)
+sjPlot::plot_model(modelValenceSad, type = "int")
+plot(estimate_means(modelValenceSad))
+
+
+emmeans(modelValenceSad, ~ VolSpont) # VolSpont main effect
+
+```
+
+## Arousal
+
+### Arousal: Fear
+
+Significant VolSpont Main Effect
+
+```{r}
+ArousalLongDataFear <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Fear"))
+
+modelArousalFear <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ArousalLongDataFear)
+summary(modelArousalFear)
+anova(modelArousalFear)
+sjPlot::plot_model(modelArousalFear, type = "int")
+plot(estimate_means(modelArousalFear))
+```
+
+### Arousal: Happy
+
+```{r}
+ArousalLongDataHappy <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Happy"))
+
+modelArousalHappy <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ArousalLongDataHappy)
+summary(modelArousalHappy)
+anova(modelArousalHappy) 
+sjPlot::plot_model(modelArousalHappy, type = "int")
+plot(estimate_means(modelArousalHappy))
+```
+
+### Arousal: Disgust
+
+```{r}
+ArousalLongDataDisgust <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Disgust"))
+
+modelArousalDisgust <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ArousalLongDataDisgust)
+summary(modelArousalDisgust)
+anova(modelArousalDisgust)
+sjPlot::plot_model(modelArousalDisgust, type = "int")
+plot(estimate_means(modelArousalDisgust))
+```
+
+### Arousal: Sad
+
+```{r}
+ArousalLongDataSad <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Sad"))
+
+modelArousalSad <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ArousalLongDataSad)
+summary(modelArousalSad)
+anova(modelArousalSad)
+sjPlot::plot_model(modelArousalSad, type = "int")
+plot(estimate_means(modelArousalSad))
+```
+
+## Dominance
+
+### Dominance: Fear
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+DominanceLongDataFear <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Fear"))
+
+modelDominanceFear <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = DominanceLongDataFear)
+summary(modelDominanceFear)
+anova(modelDominanceFear)
+sjPlot::plot_model(modelDominanceFear, type = "int")
+plot(estimate_means(modelDominanceFear))
+
+
+emmeans(modelDominanceFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Dominance: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+DominanceLongDataHappy <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Happy"))
+
+modelDominanceHappy <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = DominanceLongDataHappy)
+summary(modelDominanceHappy)
+anova(modelDominanceHappy) 
+sjPlot::plot_model(modelDominanceHappy, type = "int")
+plot(estimate_means(modelDominanceHappy))
+
+emmeans(modelDominanceHappy, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Dominance: Disgust
+
+```{r}
+DominanceLongDataDisgust <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Disgust"))
+
+modelDominanceDisgust <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = DominanceLongDataDisgust)
+summary(modelDominanceDisgust)
+anova(modelDominanceDisgust)
+sjPlot::plot_model(modelDominanceDisgust, type = "int")
+plot(estimate_means(modelDominanceDisgust))
+```
+
+### Dominance: Sad
+
+```{r}
+DominanceLongDataSad <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Sad"))
+
+modelDominanceSad <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = DominanceLongDataSad)
+summary(modelDominanceSad)
+anova(modelDominanceSad)
+sjPlot::plot_model(modelDominanceSad, type = "int")
+plot(estimate_means(modelDominanceSad))
+```
+
+## Expressivity
+
+### Expressivity: Fear
+
+Marginal Main Effect - do not report
+
+```{r}
+ExpressivityLongDataFear <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Fear"))
+
+modelExpressivityFear <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataFear)
+summary(modelExpressivityFear)
+anova(modelExpressivityFear)
+sjPlot::plot_model(modelExpressivityFear, type = "int")
+plot(estimate_means(modelExpressivityFear))
+
+emmeans(modelExpressivityFear, ~ HaveChildren) # WorkChildren main effect
+emmeans(modelExpressivityFear, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ExpressivityLongDataHappy <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Happy"))
+
+modelExpressivityHappy <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataHappy)
+summary(modelExpressivityHappy)
+anova(modelExpressivityHappy) 
+sjPlot::plot_model(modelExpressivityHappy, type = "int")
+plot(estimate_means(modelExpressivityHappy))
+
+
+emmeans(modelExpressivityHappy, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Disgust
+
+Highly Significant VolSpont Main Effect Marginal Interaction - do not report
+
+```{r}
+ExpressivityLongDataDisgust <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Disgust"))
+
+modelExpressivityDisgust <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataDisgust)
+summary(modelExpressivityDisgust)
+anova(modelExpressivityDisgust)
+sjPlot::plot_model(modelExpressivityDisgust, type = "int")
+plot(estimate_means(modelExpressivityDisgust))
+
+
+emmeans(modelExpressivityDisgust, ~ VolSpont) # VolSpont main effect
+
+```
+
+### Expressivity: Sad
+
+Significant HaveChildren Main Effect
+
+```{r}
+ExpressivityLongDataSad <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Sad"))
+
+modelExpressivitySad <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ExpressivityLongDataSad)
+summary(modelExpressivitySad) 
+anova(modelExpressivitySad)
+sjPlot::plot_model(modelExpressivitySad, type = "int")
+plot(estimate_means(modelExpressivitySad))
+
+
+emmeans(modelExpressivitySad, ~ VolSpont) # VolSpont main effect
+
+```
+
+## Confidence
+
+### Confidence: Fear
+
+Marginal Have Children Main Effect - do not report Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataFear <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Fear"))
+
+modelConfidenceFear <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataFear)
+summary(modelConfidenceFear)
+anova(modelConfidenceFear)
+sjPlot::plot_model(modelConfidenceFear, type = "int")
+plot(estimate_means(modelConfidenceFear))
+```
+
+### Confidence: Happy
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataHappy <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Happy"))
+
+modelConfidenceHappy <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataHappy)
+summary(modelConfidenceHappy)
+anova(modelConfidenceHappy) 
+sjPlot::plot_model(modelConfidenceHappy, type = "int")
+plot(estimate_means(modelConfidenceHappy))
+
+emmeans(modelDominanceSad, ~ WorkChildren) # WorkChildren main effect
+emmeans(modelDominanceSad, ~ VolSpont) # VolSpont main effect
+emmeans(modelDominanceSad, ~ WorkChildren*VolSpont) # interaction means
+```
+
+### Confidence: Disgust
+
+Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataDisgust <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelConfidenceDisgust <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataDisgust)
+summary(modelConfidenceDisgust)
+anova(modelConfidenceDisgust)
+sjPlot::plot_model(modelConfidenceDisgust, type = "int")
+plot(estimate_means(modelConfidenceDisgust))
+```
+
+### Confidence: Sad
+
+Highly Significant VolSpont Main Effect
+
+```{r}
+ConfidenceLongDataSad <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Sad"))
+
+modelConfidenceSad <- lmer(Value ~ HaveChildren + VolSpont + HaveChildren*VolSpont + (1|PartNo), data = ConfidenceLongDataSad)
+summary(modelConfidenceSad)
+anova(modelConfidenceSad)
+sjPlot::plot_model(modelConfidenceSad, type = "int")
+plot(estimate_means(modelConfidenceSad))
+```
+
+# HaveChildren and WorkChildren Models
+
+### Valence: Fear
+
+```{r}
+modelValenceFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataFear)
+
+#plot(check_model(modelValenceFear)) # assumptions checks needs to be done outside the quarto dcument
+summary(modelValenceFear)
+anova(modelValenceFear)
+sjPlot::plot_model(modelValenceFear, type = "int")
+plot(estimate_means(modelValenceFear))
+```
+
+### Valence: Happy
+
+```{r}
+ValenceLongDataHappy <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Happy"))
+
+modelValenceHappy <- lmer(Value ~ HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataHappy)
+summary(modelValenceHappy)
+anova(modelValenceHappy) 
+```
+
+####Raw Data Means - Just doing this once as a sanity check.
+
+```{r}
+ValenceLongDataHappyRawMeans <- ValenceLongDataHappy %>%
+  group_by(HaveChildren, WorkChildren) %>%
+  summarise(mean = mean(Value))
+
+ggplot(data = ValenceLongDataHappyRawMeans, aes(x = HaveChildren, y = mean, colour = WorkChildren)) +
+    geom_line(aes(group = WorkChildren)) +
+    geom_point() +
+    labs(
+        x = "Works with Children",
+        y = "Valence",
+        title = paste(
+            "Raw Data Means - Calculated Outisde the Model"
+        )
+    )
+```
+
+```{r}
+sjPlot::plot_model(modelValenceHappy, type = "int")
+plot(estimate_means(modelValenceHappy))
+```
+
+### Valence: Disgust
+
+Significant Havechildren Main Effect
+
+```{r}
+ValenceLongDataDisgust <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelValenceDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataDisgust)
+summary(modelValenceDisgust)
+anova(modelValenceDisgust)
+sjPlot::plot_model(modelValenceDisgust, type = "int")
+plot(estimate_means(modelValenceDisgust))
+
+emmeans(modelValenceDisgust, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Valence: Sad
+
+```{r}
+ValenceLongDataSad <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Sad"))
+
+modelValenceSad <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataSad)
+summary(modelValenceSad)
+anova(modelValenceSad)
+sjPlot::plot_model(modelValenceSad, type = "int")
+plot(estimate_means(modelValenceSad))
+```
+
+## Arousal
+
+### Arousal: Fear
+
+```{r}
+ArousalLongDataFear <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Fear"))
+
+modelArousalFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataFear)
+summary(modelArousalFear)
+anova(modelArousalFear)
+sjPlot::plot_model(modelArousalFear, type = "int")
+plot(estimate_means(modelArousalFear))
+```
+
+### Arousal: Happy
+
+```{r}
+ArousalLongDataHappy <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Happy"))
+
+modelArousalHappy <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataHappy)
+summary(modelArousalHappy)
+anova(modelArousalHappy) 
+sjPlot::plot_model(modelArousalHappy, type = "int")
+plot(estimate_means(modelArousalHappy))
+```
+
+### Arousal: Disgust
+
+```{r}
+ArousalLongDataDisgust <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Disgust"))
+
+modelArousalDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataDisgust)
+summary(modelArousalDisgust)
+anova(modelArousalDisgust)
+sjPlot::plot_model(modelArousalDisgust, type = "int")
+plot(estimate_means(modelArousalDisgust))
+```
+
+### Arousal: Sad
+
+```{r}
+ArousalLongDataSad <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Sad"))
+
+modelArousalSad <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataSad)
+summary(modelArousalSad)
+anova(modelArousalSad)
+sjPlot::plot_model(modelArousalSad, type = "int")
+plot(estimate_means(modelArousalSad))
+```
+
+## Dominance
+
+### Dominance: Fear
+
+```{r}
+DominanceLongDataFear <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Fear"))
+
+modelDominanceFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataFear)
+summary(modelDominanceFear)
+anova(modelDominanceFear)
+sjPlot::plot_model(modelDominanceFear, type = "int")
+plot(estimate_means(modelDominanceFear))
+```
+
+### Dominance: Happy
+
+Significant Havechildren Main Effect
+
+```{r}
+DominanceLongDataHappy <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Happy"))
+
+modelDominanceHappy <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataHappy)
+summary(modelDominanceHappy)
+anova(modelDominanceHappy) 
+sjPlot::plot_model(modelDominanceHappy, type = "int")
+plot(estimate_means(modelDominanceHappy))
+
+emmeans(modelDominanceHappy, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Dominance: Disgust
+
+Significant Havechildren WorkChildren Interaction (A crossover interaction) - This is probably drive by the large difference in those who do not have chilren. Amongst those people those who do not work with children find greater levels of dominance while those who do find lower levels. An interesting finding but not quite the hypothesised interaction.
+
+```{r}
+DominanceLongDataDisgust <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Disgust"))
+
+modelDominanceDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataDisgust)
+summary(modelDominanceDisgust)
+anova(modelDominanceDisgust)
+sjPlot::plot_model(modelDominanceDisgust, type = "int")
+plot(estimate_means(modelDominanceDisgust))
+
+emmeans(modelDominanceDisgust, ~ WorkChildren) # WorkChildren main effect
+emmeans(modelDominanceDisgust, ~ HaveChildren) # VolSpont main effect
+emmeans(modelDominanceDisgust, ~ WorkChildren*HaveChildren) # interaction means
+```
+
+### Dominance: Sad
+
+```{r}
+DominanceLongDataSad <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Sad"))
+
+modelDominanceSad <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataSad)
+summary(modelDominanceSad)
+anova(modelDominanceSad)
+sjPlot::plot_model(modelDominanceSad, type = "int")
+plot(estimate_means(modelDominanceSad))
+```
+
+## Expressivity
+
+### Expressivity: Fear
+
+Highly Significant HaveChildren Main Effect
+
+```{r}
+ExpressivityLongDataFear <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Fear"))
+
+modelExpressivityFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataFear)
+summary(modelExpressivityFear)
+anova(modelExpressivityFear)
+sjPlot::plot_model(modelExpressivityFear, type = "int")
+plot(estimate_means(modelExpressivityFear))
+
+emmeans(modelExpressivityFear, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Expressivity: Happy
+
+```{r}
+ExpressivityLongDataHappy <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Happy"))
+
+modelExpressivityHappy <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataHappy)
+summary(modelExpressivityHappy)
+anova(modelExpressivityHappy) 
+sjPlot::plot_model(modelExpressivityHappy, type = "int")
+plot(estimate_means(modelExpressivityHappy))
+```
+
+### Expressivity: Disgust
+
+```{r}
+ExpressivityLongDataDisgust <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Disgust"))
+
+modelExpressivityDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataDisgust)
+summary(modelExpressivityDisgust)
+anova(modelExpressivityDisgust)
+sjPlot::plot_model(modelExpressivityDisgust, type = "int")
+plot(estimate_means(modelExpressivityDisgust))
+
+
+```
+
+### Expressivity: Sad
+
+Significant HaveChildren Main Effect
+
+```{r}
+ExpressivityLongDataSad <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Sad"))
+
+modelExpressivitySad <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataSad)
+summary(modelExpressivitySad) 
+anova(modelExpressivitySad)
+sjPlot::plot_model(modelExpressivitySad, type = "int")
+plot(estimate_means(modelExpressivitySad))
+```
+
+## Confidence
+
+### Confidence: Fear
+
+```{r}
+ConfidenceLongDataFear <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Fear"))
+
+modelConfidenceFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataFear)
+summary(modelConfidenceFear)
+anova(modelConfidenceFear)
+sjPlot::plot_model(modelConfidenceFear, type = "int")
+plot(estimate_means(modelConfidenceFear))
+
+emmeans(modelConfidenceFear, ~ WorkChildren) # WorkChildren main effect
+emmeans(modelConfidenceFear, ~ HaveChildren) # VolSpont main effect
+emmeans(modelConfidenceFear, ~ WorkChildren*HaveChildren) # interaction means
+```
+
+### Confidence: Happy
+
+```{r}
+ConfidenceLongDataHappy <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Happy"))
+
+modelConfidenceHappy <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataHappy)
+summary(modelConfidenceHappy)
+anova(modelConfidenceHappy) 
+sjPlot::plot_model(modelConfidenceHappy, type = "int")
+plot(estimate_means(modelConfidenceHappy))
+```
+
+### Confidence: Disgust
+
+```{r}
+ConfidenceLongDataDisgust <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Disgust"))
+
+modelConfidenceDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataDisgust)
+summary(modelConfidenceDisgust)
+anova(modelConfidenceDisgust)
+sjPlot::plot_model(modelConfidenceDisgust, type = "int")
+plot(estimate_means(modelConfidenceDisgust))
+```
+
+### Confidence: Sad
+
+Significant Interaction Those who have children and do not work with children are more confident than those who have children and work with them.
+
+```{r}
+ConfidenceLongDataSad <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Sad"))
+
+modelConfidenceSad <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataSad)
+summary(modelConfidenceSad)
+anova(modelConfidenceSad)
+sjPlot::plot_model(modelConfidenceSad, type = "int")
+plot(estimate_means(modelConfidenceSad))
+```
+
+# Wordclouds
+
+### Volitional Fear
+
+```{r}
+wordcloud(c(wordcloudVars$Q6.6, wordcloudVars$Q7.6))
+```
+
+### Spontaneous Fear
+
+```{r}
+wordcloud(c(wordcloudVars$Q8.6, wordcloudVars$Q9.6))
+```
+
+### Volitional Happy
+
+```{r}
+wordcloud(c(wordcloudVars$Q27.6, wordcloudVars$Q28.6))
+```
+
+### Spontaneous Happy
+
+```{r}
+wordcloud(c(wordcloudVars$Q25.6, wordcloudVars$Q27.6))
+```
+
+### Volitional Disgust
+
+```{r}
+wordcloud(c(wordcloudVars$Q17.6, wordcloudVars$Q18.6))
+```
+
+### Spontaneous Disgust
+
+```{r}
+wordcloud(c(wordcloudVars$Q19.6, wordcloudVars$Q20.6))
+```
+
+### Volitional Sad
+
+```{r}
+wordcloud(c(wordcloudVars$Q21.6, wordcloudVars$Q22.6))
+```
+
+### Spontaneous Sad
+
+```{r}
+wordcloud(c(wordcloudVars$Q23.6, wordcloudVars$Q24.6))
+```
+
+### Pride (Volitional)
+
+```{r}
+wordcloud(c(wordcloudVars$Q10.6, wordcloudVars$Q11.6))
+```
+
+### Suprise (Spontaneous)
+
+```{r}
+wordcloud(c(wordcloudVars$Q12.6, wordcloudVars$Q13.6))
+```
+
+### Anger (Spontaneous)
+
+```{r}
+wordcloud(c(wordcloudVars$Q14.6))
+```
+
+### Embarrased (Volitional)
+
+```{r}
+wordcloud(c(wordcloudVars$Q15.6, wordcloudVars$Q16.6))
+```
+
+## Experimental Stuff
+
+### Valence: Anger (only Spontaneous)
+
+```{r}
+ValenceLongDataAnger <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Anger"))
+
+modelValenceAnger <- lm(Value ~ HaveChildren*WorkChildren, data = ValenceLongDataAnger)
+summary(modelValenceAnger)
+anova(modelValenceAnger)
+sjPlot::plot_model(modelValenceAnger, type = "pred")
+
+result <- estimate_expectation(modelValenceAnger, data = "grid")
+plot(result)
+```
+
+### Valence: Surprise (only Spontaneous)
+
+```{r}
+ValenceLongDataSurprise <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Surprise"))
+
+modelValenceSurprise <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataSurprise)
+summary(modelValenceSurprise)
+anova(modelValenceSurprise)
+sjPlot::plot_model(modelValenceSurprise, type = "pred")
+
+result <- estimate_expectation(modelValenceSurprise, data = "grid")
+plot(result)
+```
+
+### Valence: Embarrassed (only Volitional)
+
+```{r}
+ValenceLongDataEmbarrassed <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Embarrassed"))
+
+modelValenceEmbarrassed <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataEmbarrassed)
+summary(modelValenceEmbarrassed)
+anova(modelValenceEmbarrassed)
+sjPlot::plot_model(modelValenceEmbarrassed, type = "pred")
+
+result <- estimate_expectation(modelValenceEmbarrassed, data = "grid")
+plot(result)
+
+```
+
+### Valence: Pride (only Volitional)
+
+```{r}
+ValenceLongDataPride <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Pride"))
+
+modelValencePride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ValenceLongDataPride)
+summary(modelValencePride)
+anova(modelValencePride)
+sjPlot::plot_model(modelValencePride, type = "pred")
+
+result <- estimate_expectation(modelValencePride, data = "grid")
+plot(result)
+```
+
+### Arousal: Anger (only Spontaneous)
+
+```{r}
+ArousalLongDataAnger <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Anger"))  
+
+modelArousalAnger <- lm(Value ~ HaveChildren*WorkChildren, data = ArousalLongDataAnger) 
+summary(modelArousalAnger) 
+anova(modelArousalAnger) 
+sjPlot::plot_model(modelArousalAnger, type = "pred")  
+result <- estimate_expectation(modelArousalAnger, data = "grid") 
+plot(result)
+```
+
+### Arousal: Surprise (only Spontaneous)
+
+```{r}
+ArousalLongDataSurprise <- dplyr::filter(ValenceLongData, EmotionLabel %in% c("Surprise"))  
+
+modelArousalSurprise <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataSurprise) 
+summary(modelArousalSurprise) 
+anova(modelArousalSurprise) 
+sjPlot::plot_model(modelArousalSurprise, type = "pred")  
+result <- estimate_expectation(modelArousalSurprise, data = "grid") 
+plot(result)
+```
+
+### Arousal: Embarrassed (only Volitional)
+
+```{r}
+ArousalLongDataEmbarrassed <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Embarrassed"))  
+
+modelArousalEmbarrassed <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataEmbarrassed) 
+summary(modelArousalEmbarrassed) 
+anova(modelArousalEmbarrassed) 
+sjPlot::plot_model(modelArousalEmbarrassed, type = "pred")  
+result <- estimate_expectation(modelArousalEmbarrassed, data = "grid") 
+plot(result) 
+
+emmeans(modelArousalEmbarrassed, ~ HaveChildren) # WorkChildren main effect
+
+
+```
+
+### Arousal: Pride (only Volitional)
+
+```{r}
+ArousalLongDataPride <- dplyr::filter(ArousalLongData, EmotionLabel %in% c("Pride"))  
+modelArousalPride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ArousalLongDataPride)
+summary(modelArousalPride) 
+anova(modelArousalPride) 
+sjPlot::plot_model(modelArousalPride, type = "pred")  
+result <- estimate_expectation(modelArousalPride, data = "grid") 
+plot(result)
+```
+
+## Dominance
+
+### Dominance: Anger
+
+```{r}
+DominanceLongDataAnger <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Anger"))  
+
+modelDominanceAnger <- lm(Value ~ HaveChildren*WorkChildren, data = DominanceLongDataAnger) 
+summary(modelDominanceAnger) 
+anova(modelDominanceAnger) 
+sjPlot::plot_model(modelDominanceAnger, type = "int") 
+plot(estimate_means(modelDominanceAnger))
+```
+
+### Dominance: Surprise
+
+Significant Havechildren Main Effect
+
+```{r}
+DominanceLongDataSurprise <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Surprise"))  
+
+modelDominanceSurprise <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataSurprise) 
+summary(modelDominanceSurprise) 
+anova(modelDominanceSurprise)  
+sjPlot::plot_model(modelDominanceSurprise, type = "int") 
+plot(estimate_means(modelDominanceSurprise))  
+```
+
+### Dominance: Embarrassed
+
+```{r}
+DominanceLongDataEmbarrassed <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Embarrassed"))  
+
+modelDominanceEmbarrassed <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataEmbarrassed) 
+summary(modelDominanceEmbarrassed) 
+anova(modelDominanceEmbarrassed) 
+sjPlot::plot_model(modelDominanceEmbarrassed, type = "int") 
+plot(estimate_means(modelDominanceEmbarrassed))  
+```
+
+### Dominance: Pride
+
+```{r}
+DominanceLongDataPride <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Pride"))  
+modelDominancePride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataPride) 
+summary(modelDominancePride) 
+anova(modelDominancePride) 
+sjPlot::plot_model(modelDominancePride, type = "int") 
+plot(estimate_means(modelDominancePride))
+```
+
+## Expressivity
+
+### Expressivity: Anger
+
+Highly Significant HaveChildren Main Effect
+
+```{r}
+ExpressivityLongDataAnger <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Anger"))
+
+modelExpressivityAnger <- lm(Value ~ HaveChildren*WorkChildren, data = ExpressivityLongDataAnger) 
+summary(modelExpressivityAnger) 
+anova(modelExpressivityAnger) 
+sjPlot::plot_model(modelExpressivityAnger, type = "int") 
+plot(estimate_means(modelExpressivityAnger))  
+
+emmeans(modelExpressivityAnger, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Expressivity: Surprise
+
+```{r}
+ExpressivityLongDataSurprise <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Surprise"))  
+
+modelExpressivitySurprise <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataSurprise) 
+summary(modelExpressivitySurprise) 
+anova(modelExpressivitySurprise)  
+sjPlot::plot_model(modelExpressivitySurprise, type = "int") 
+plot(estimate_means(modelExpressivitySurprise))
+
+emmeans(modelExpressivitySurprise, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Expressivity: Embarrassed
+
+```{r}
+ExpressivityLongDataEmbarrassed <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Embarrassed"))  
+
+modelExpressivityEmbarrassed <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataEmbarrassed) 
+summary(modelExpressivityEmbarrassed) 
+anova(modelExpressivityEmbarrassed) 
+sjPlot::plot_model(modelExpressivityEmbarrassed, type = "int") 
+plot(estimate_means(modelExpressivityEmbarrassed))  
+
+emmeans(modelExpressivityEmbarrassed, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+### Expressivity: Pride
+
+Significant HaveChildren Main Effect
+
+```{r}
+ExpressivityLongDataPride <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Pride"))  
+
+modelExpressivityPride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataPride) 
+summary(modelExpressivityPride)  
+anova(modelExpressivityPride) 
+sjPlot::plot_model(modelExpressivityPride, type = "int") 
+plot(estimate_means(modelExpressivityPride))
+
+emmeans(modelExpressivityPride, ~ HaveChildren) # WorkChildren main effect
+
+```
+
+## Confidence
+
+### Confidence: Anger
+
+```{r}
+ConfidenceLongDataAnger <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Anger"))  
+
+modelConfidenceAnger <- lm(Value ~ HaveChildren*WorkChildren, data = ConfidenceLongDataAnger) 
+summary(modelConfidenceAnger) 
+anova(modelConfidenceAnger) 
+sjPlot::plot_model(modelConfidenceAnger, type = "int") 
+plot(estimate_means(modelConfidenceAnger))  
+```
+
+### Confidence: Surprise
+
+```{r}
+ConfidenceLongDataSurprise <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Surprise"))  
+
+modelConfidenceSurprise <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataSurprise) 
+summary(modelConfidenceSurprise) 
+anova(modelConfidenceSurprise)  
+sjPlot::plot_model(modelConfidenceSurprise, type = "int") 
+plot(estimate_means(modelConfidenceSurprise))
+```
+
+### Confidence: Embarrassed
+
+```{r}
+ConfidenceLongDataEmbarrassed <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Embarrassed"))  
+
+modelConfidenceEmbarrassed <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataEmbarrassed) 
+summary(modelConfidenceEmbarrassed) 
+anova(modelConfidenceEmbarrassed) 
+sjPlot::plot_model(modelConfidenceEmbarrassed, type = "int") 
+plot(estimate_means(modelConfidenceEmbarrassed))
+```
+
+### Confidence: Sad
+
+```{r}
+ConfidenceLongDataPride <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c("Pride"))  
+
+modelConfidencePride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataPride) 
+summary(modelConfidencePride) 
+anova(modelConfidencePride) 
+sjPlot::plot_model(modelConfidencePride, type = "int") 
+plot(estimate_means(modelConfidencePride))
+```
+
+# 
+
+#### Valence: Individual Clips
+
+```{r}
+ValenceLongDataHappyS3 <- dplyr::filter(ValenceLongDataHappy, Clip %in% c("S3"))
+
+modelValenceLongDataHappyS3 <- lm(Value ~ WorkChildren*HaveChildren, data = ValenceLongDataHappyS3)
+summary(modelValenceLongDataHappyS3)
+anova(modelValenceLongDataHappyS3)
+sjPlot::plot_model(modelValenceLongDataHappyS3, type = "int")
+```
