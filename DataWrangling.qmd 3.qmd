@@ -17,6 +17,8 @@ library(emmeans)
 library(easystats)
 library(wordcloud)
 library(tm)
+library(effectsize)
+library(ggplot2)
 ```
 
 #Data Wrangling
@@ -273,6 +275,8 @@ plot(estimate_means(modelValenceFear))
 
 emmeans(modelValenceFear, ~ VolSpont) # VolSpont main effect
 
+eta_squared(modelValenceFear, partial = TRUE)
+
 ```
 
 ### Valence: Happy
@@ -288,6 +292,8 @@ anova(modelValenceHappy)
 
 emmeans(modelValenceHappy, ~ WorkChildren) # WorkChildren main effect
 emmeans(modelValenceHappy, ~ VolSpont) # VolSpont main effect
+
+eta_squared(modelValenceHappy, partial = TRUE)
 
 ```
 
@@ -480,12 +486,23 @@ DominanceLongDataSad <- dplyr::filter(DominanceLongData, EmotionLabel %in% c("Sa
 modelDominanceSad <- lmer(Value ~ WorkChildren + VolSpont + WorkChildren*VolSpont + (1|PartNo), data = DominanceLongDataSad)
 summary(modelDominanceSad)
 anova(modelDominanceSad)
-sjPlot::plot_model(modelDominanceSad, type = "int")
+
+DSplot <- sjPlot::plot_model(modelDominanceSad, type = "int",
+  title = "Interaction Plot: For ratings of dominance with the emotion label sad",
+  subtitle = "Effect of Dominance and Sad on Response",
+  subtitle.position = "plot")
+
+DSplot <- DSplot +
+  labs(y = "Dominance")
+
+print(DSplot)
+
 plot(estimate_means(modelDominanceSad))
 
-emmeans(modelDominanceSad, ~ WorkChildren) # WorkChildren main effect
-emmeans(modelDominanceSad, ~ VolSpont) # VolSpont main effect
+
 emmeans(modelDominanceSad, ~ WorkChildren*VolSpont) # interaction means
+
+eta_squared(modelDominanceSad, partial = TRUE)
 ```
 
 ## Expressivity
@@ -811,7 +828,9 @@ anova(modelDominanceHappy)
 sjPlot::plot_model(modelDominanceHappy, type = "int")
 plot(estimate_means(modelDominanceHappy))
 
-emmeans(modelDominanceHappy, ~ HaveChildren) # WorkChildren main effect
+emmeans(modelDominanceHappy, ~ HaveChildren) # HaveChildren main effect
+
+eta_squared(modelDominanceHappy, partial = TRUE)
 
 ```
 
@@ -856,6 +875,8 @@ plot(estimate_means(modelExpressivityFear))
 
 emmeans(modelExpressivityFear, ~ HaveChildren) # WorkChildren main effect
 emmeans(modelExpressivityFear, ~ VolSpont) # VolSpont main effect
+
+eta_squared(modelExpressivityFear, partial = TRUE)
 
 ```
 
@@ -1038,6 +1059,7 @@ plot(estimate_means(modelValenceDisgust))
 
 emmeans(modelValenceDisgust, ~ HaveChildren) # WorkChildren main effect
 
+eta_squared(modelValenceDisgust, partial = TRUE)
 ```
 
 ### Valence: Sad
@@ -1129,7 +1151,9 @@ anova(modelDominanceHappy)
 sjPlot::plot_model(modelDominanceHappy, type = "int")
 plot(estimate_means(modelDominanceHappy))
 
-emmeans(modelDominanceHappy, ~ HaveChildren) # WorkChildren main effect
+emmeans(modelDominanceHappy, ~ HaveChildren) # HaveChildren main effect
+
+eta_squared(modelDominanceHappy, partial = TRUE)
 
 ```
 
@@ -1143,12 +1167,24 @@ DominanceLongDataDisgust <- dplyr::filter(DominanceLongData, EmotionLabel %in% c
 modelDominanceDisgust <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = DominanceLongDataDisgust)
 summary(modelDominanceDisgust)
 anova(modelDominanceDisgust)
-sjPlot::plot_model(modelDominanceDisgust, type = "int")
+DDplot <- sjPlot::plot_model(modelDominanceDisgust, type = "int",
+  title = "Interaction Plot: For ratings of dominance with the emotion label disgust",
+  subtitle = "Effect of Dominance and Disgust on Response",
+  subtitle.position = "plot")
+
+DDplot <- DDplot +
+  labs(y = "Dominance")
+
+print(DDplot)
+
+
 plot(estimate_means(modelDominanceDisgust))
 
 emmeans(modelDominanceDisgust, ~ WorkChildren) # WorkChildren main effect
 emmeans(modelDominanceDisgust, ~ HaveChildren) # VolSpont main effect
 emmeans(modelDominanceDisgust, ~ WorkChildren*HaveChildren) # interaction means
+
+eta_squared(modelDominanceDisgust, partial = TRUE)
 ```
 
 ### Dominance: Sad
@@ -1232,12 +1268,24 @@ ConfidenceLongDataFear <- dplyr::filter(ConfidenceLongData, EmotionLabel %in% c(
 modelConfidenceFear <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ConfidenceLongDataFear)
 summary(modelConfidenceFear)
 anova(modelConfidenceFear)
-sjPlot::plot_model(modelConfidenceFear, type = "int")
+plot <- sjPlot::plot_model(modelConfidenceFear, type = "int",
+  title = "Interaction Plot: For ratings of confidence with the emotion label fear",
+  subtitle = "Effect of Valence and Fear on Response",
+  subtitle.position = "plot")
+
+plot <- plot +
+  labs(y = "Confidence")
+
+print(plot)
+
 plot(estimate_means(modelConfidenceFear))
+
 
 emmeans(modelConfidenceFear, ~ WorkChildren) # WorkChildren main effect
 emmeans(modelConfidenceFear, ~ HaveChildren) # VolSpont main effect
 emmeans(modelConfidenceFear, ~ WorkChildren*HaveChildren) # interaction means
+
+eta_squared(modelConfidenceFear, partial = TRUE)
 ```
 
 ### Confidence: Happy
@@ -1451,7 +1499,7 @@ plot(result)
 
 emmeans(modelArousalEmbarrassed, ~ HaveChildren) # WorkChildren main effect
 
-
+eta_squared(modelArousalEmbarrassed, partial = TRUE)
 ```
 
 ### Arousal: Pride (only Volitional)
@@ -1534,6 +1582,7 @@ plot(estimate_means(modelExpressivityAnger))
 
 emmeans(modelExpressivityAnger, ~ HaveChildren) # WorkChildren main effect
 
+eta_squared(modelExpressivityAnger, partial = TRUE)
 ```
 
 ### Expressivity: Surprise
@@ -1548,6 +1597,8 @@ sjPlot::plot_model(modelExpressivitySurprise, type = "int")
 plot(estimate_means(modelExpressivitySurprise))
 
 emmeans(modelExpressivitySurprise, ~ HaveChildren) # WorkChildren main effect
+
+eta_squared(modelExpressivitySurprise, partial = TRUE)
 
 ```
 
@@ -1564,6 +1615,8 @@ plot(estimate_means(modelExpressivityEmbarrassed))
 
 emmeans(modelExpressivityEmbarrassed, ~ HaveChildren) # WorkChildren main effect
 
+eta_squared(modelExpressivityEmbarrassed, partial = TRUE)
+
 ```
 
 ### Expressivity: Pride
@@ -1571,6 +1624,7 @@ emmeans(modelExpressivityEmbarrassed, ~ HaveChildren) # WorkChildren main effect
 Significant HaveChildren Main Effect
 
 ```{r}
+
 ExpressivityLongDataPride <- dplyr::filter(ExpressivityLongData, EmotionLabel %in% c("Pride"))  
 
 modelExpressivityPride <- lmer(Value ~ HaveChildren + WorkChildren + HaveChildren*WorkChildren + (1|PartNo), data = ExpressivityLongDataPride) 
@@ -1580,6 +1634,8 @@ sjPlot::plot_model(modelExpressivityPride, type = "int")
 plot(estimate_means(modelExpressivityPride))
 
 emmeans(modelExpressivityPride, ~ HaveChildren) # WorkChildren main effect
+
+eta_squared(modelExpressivityPride, partial = TRUE)
 
 ```
 
